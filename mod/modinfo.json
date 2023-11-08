@@ -1,0 +1,12 @@
+{
+	"id": "vigaro.roomscreenshot",
+	"name": "Room Screenshot",
+	"version": "1.0.0",
+	"hide_version": false,
+	"authors": "Vigaro",
+	"description": "Room Screenshot",
+	"requirements": [ ],
+	"requirements_names": [ ],
+	"checksum_override_version": false,
+	"tags": [ "Tools" ]
+}
