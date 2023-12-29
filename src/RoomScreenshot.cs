@@ -1,3 +1,4 @@
+using System.Collections;
 using System.IO;
 using Object = UnityEngine.Object;
 
@@ -61,28 +62,11 @@ public static class RoomScreenshot
                 if (ScreenshotDelay <= 0)
                 {
                     ScreenshotDelay = RoomScreenshotOptions.Instance.FramesDelay.Value;
-                    Screenshots.Add(ScreenCapture.CaptureScreenshotAsTexture());
 
-                    if (camera.room.cameraPositions.Length > NextScreenshotPos + 1)
-                    {
-                        camera.MoveCamera(++NextScreenshotPos);
-                    }
-                    else
-                    {
-                        SaveScreenshots(camera);
-                        ClearScreenshots();
-                        TakingScreenshot = false;
-                        camera.MoveCamera(OriginalCameraPos);
-                        HUDVisibility(camera, true);
-                    }
+                    Plugin.Coroutine(TakeScreenshot(camera, camera.room.cameraPositions.Length <= NextScreenshotPos + 1));
                 }
                 else
                 {
-                    if (ScreenshotDelay == RoomScreenshotOptions.Instance.FramesDelay.Value)
-                    {
-                        Futile.stage.Redraw(true, true);
-                    }
-
                     ScreenshotDelay--;
                 }
             }
@@ -131,98 +115,159 @@ public static class RoomScreenshot
         Screenshots.Clear();
     }
 
-    private static void SaveScreenshots(RoomCamera camera)
+    private static IEnumerator TakeScreenshot(RoomCamera camera, bool final = false)
     {
-        if (camera.room.cameraPositions.Length == 0 || Screenshots.Count == 0) return;
-        
-        var roomName = camera.room.roomSettings.name;
-        var directory = Path.Combine(Custom.RootFolderDirectory(), "RoomScreenshots");
-        Directory.CreateDirectory(directory);
+        yield return null;
+        Futile.stage.Redraw(true, true);
+        yield return new WaitForEndOfFrame();
 
-        var positions = new Vector2[camera.room.cameraPositions.Length];
-        camera.room.cameraPositions.CopyTo(positions, 0);
-
-        var bottomLeft = new Vector2Int(int.MaxValue, int.MaxValue);
-        var topRight = new Vector2Int(int.MinValue, int.MinValue);
-
-        for (var i = 0; i < positions.Length && i < Screenshots.Count; i++)
+        try
         {
-            var position = positions[i];
-
-            if (position.x < bottomLeft.x)
+            Screenshots.Add(ScreenCapture.CaptureScreenshotAsTexture());
+            if (final)
             {
-                bottomLeft.x = (int)position.x;
+                camera.MoveCamera(OriginalCameraPos);
+                Plugin.Coroutine(SaveScreenshots(camera));
             }
-            if (position.x > topRight.x)
+            else
             {
-                topRight.x = (int)position.x;
-            }
-            if (position.y < bottomLeft.y)
-            {
-                bottomLeft.y = (int)position.y;
-            }
-            if (position.y > topRight.y)
-            {
-                topRight.y = (int)position.y;
+                camera.MoveCamera(++NextScreenshotPos);
             }
         }
-
-        var screenshotWidth = Screenshots[0].width;
-        var screenshotHeight = Screenshots[0].height;
-
-        topRight.x += screenshotWidth;
-        topRight.y += screenshotHeight;
-
-        var xOffset = 0;
-        var yOffset = 0;
-
-        if (bottomLeft.x < 0)
+        catch
         {
-            xOffset = Math.Abs(bottomLeft.x);
-            topRight.x += xOffset;
-            bottomLeft.x = 0;
+            TakingScreenshot = false;
+            HUDVisibility(camera, true);
+            ClearScreenshots();
+            throw;
         }
-
-        if (bottomLeft.y < 0)
+        finally
         {
-            yOffset = Math.Abs(bottomLeft.y);
-            topRight.y += yOffset;
-            bottomLeft.y = 0;
-        }
-
-        var pixels = new Color32[topRight.x * topRight.y];
-
-        for (var i = 0; i < positions.Length && i < Screenshots.Count; i++)
-        {
-            var position = positions[i];
-            var screenshot = Screenshots[i];
-            var screenPixels = screenshot.GetPixels32();
-
-            for (var y = 0; y < screenshotHeight; y++)
+            if (final)
             {
-                for (var x = 0; x < screenshotWidth; x++)
+                HUDVisibility(camera, true);
+                camera.MoveCamera(OriginalCameraPos);
+            }
+        }
+    }
+
+    private static IEnumerator SaveScreenshots(RoomCamera camera)
+    {
+        try
+        {
+            yield return new WaitForEndOfFrame();
+
+            if (camera.room.cameraPositions.Length == 0 || Screenshots.Count == 0) yield break;
+
+            var roomName = camera.room.roomSettings.name;
+            var directory = Path.Combine(Custom.RootFolderDirectory(), "RoomScreenshots");
+            Directory.CreateDirectory(directory);
+
+            var positions = new Vector2[camera.room.cameraPositions.Length];
+            camera.room.cameraPositions.CopyTo(positions, 0);
+
+            var bottomLeft = new Vector2Int(int.MaxValue, int.MaxValue);
+            var topRight = new Vector2Int(int.MinValue, int.MinValue);
+
+            for (var i = 0; i < positions.Length && i < Screenshots.Count; i++)
+            {
+                var position = positions[i];
+
+                if (position.x < bottomLeft.x)
                 {
-                    var pixelIndex = (int)((y + yOffset + position.y) * topRight.x + x + xOffset+ position.x);
-                    pixels[pixelIndex] = screenPixels[y * screenshotWidth + x];
+                    bottomLeft.x = (int)position.x;
+                }
+
+                if (position.x > topRight.x)
+                {
+                    topRight.x = (int)position.x;
+                }
+
+                if (position.y < bottomLeft.y)
+                {
+                    bottomLeft.y = (int)position.y;
+                }
+
+                if (position.y > topRight.y)
+                {
+                    topRight.y = (int)position.y;
                 }
             }
+
+            var screenshotWidth = Screenshots[0].width;
+            var screenshotHeight = Screenshots[0].height;
+
+            topRight.x += screenshotWidth;
+            topRight.y += screenshotHeight;
+
+            var xOffset = 0;
+            var yOffset = 0;
+
+            if (bottomLeft.x < 0)
+            {
+                xOffset = Math.Abs(bottomLeft.x);
+                topRight.x += xOffset;
+                bottomLeft.x = 0;
+            }
+
+            if (bottomLeft.y < 0)
+            {
+                yOffset = Math.Abs(bottomLeft.y);
+                topRight.y += yOffset;
+                bottomLeft.y = 0;
+            }
+
+            var pixels = new Color32[topRight.x * topRight.y];
+
+            for (var i = 0; i < positions.Length && i < Screenshots.Count; i++)
+            {
+                var position = positions[i];
+                var screenshot = Screenshots[i];
+                var screenPixels = screenshot.GetPixels32();
+
+                for (var y = 0; y < screenshotHeight; y++)
+                {
+                    for (var x = 0; x < screenshotWidth; x++)
+                    {
+                        var pixelIndex = (int)((y + yOffset + position.y) * topRight.x + x + xOffset + position.x);
+                        pixels[pixelIndex] = screenPixels[y * screenshotWidth + x];
+                    }
+                }
+            }
+
+            var texture = new Texture2D(topRight.x, topRight.y, TextureFormat.ARGB32, false);
+            try
+            {
+                texture.SetPixels32(pixels);
+                texture.Apply();
+
+                var file = Path.Combine(directory, $"{roomName}_{DateTime.Now:yyyy'-'MM'-'dd'_'HH'-'mm'-'ss}.png");
+                File.WriteAllBytes(file, texture.EncodeToPNG());
+
+                var screensDirectory = Path.Combine(directory, "Screens");
+                Directory.CreateDirectory(screensDirectory);
+
+                for (var i = 0; i < Screenshots.Count; i++)
+                {
+                    var screenTexture = Screenshots[i];
+                    var screenFile = Path.Combine(screensDirectory, $"{roomName}_{i}_{DateTime.Now:yyyy'-'MM'-'dd'_'HH'-'mm'-'ss}.png");
+                    File.WriteAllBytes(screenFile, screenTexture.EncodeToPNG());
+                }
+
+                if (RoomScreenshotOptions.Instance.OpenFolder.Value)
+                {
+                    RoomScreenshotOptions.Instance.OpenDirClick(null);
+                }
+            }
+            finally
+            {
+                Object.Destroy(texture);
+            }
         }
-
-        var texture = new Texture2D(topRight.x, topRight.y, TextureFormat.ARGB32, false);
-        texture.SetPixels32(pixels);
-        texture.Apply();
-
-        var file = Path.Combine(directory, $"{roomName}_{DateTime.Now:yyyy'-'MM'-'dd'_'HH'-'mm'-'ss}.png");
-        File.WriteAllBytes(file, texture.EncodeToPNG());
-
-        var screensDirectory = Path.Combine(directory, "Screens");
-        Directory.CreateDirectory(screensDirectory);
-
-        for (var i = 0; i < Screenshots.Count; i++)
+        finally
         {
-            var screenTexture = Screenshots[i];
-            var screenFile = Path.Combine(screensDirectory, $"{roomName}_{i}_{DateTime.Now:yyyy'-'MM'-'dd'_'HH'-'mm'-'ss}.png");
-            File.WriteAllBytes(screenFile, screenTexture.EncodeToPNG());
+            ClearScreenshots();
+            TakingScreenshot = false;
         }
     }
 }

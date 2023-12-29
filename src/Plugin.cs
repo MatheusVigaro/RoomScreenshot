@@ -1,4 +1,5 @@
-﻿using System.Security;
+﻿using System.Collections;
+using System.Security;
 using System.Security.Permissions;
 using BepInEx;
 
@@ -15,9 +16,11 @@ public class Plugin : BaseUnityPlugin
     public const string MOD_ID = "vigaro.roomscreenshot";
 
     public bool IsInit;
+    public static Plugin Instance;
 
     private void OnEnable()
     {
+        Instance = this;
         try
         {
             On.RainWorld.OnModsInit += RainWorld_OnModsInit;
@@ -27,6 +30,12 @@ public class Plugin : BaseUnityPlugin
             Logger.LogError(ex);
         }
     }
+    
+    public static Coroutine Coroutine(IEnumerator coroutine)
+    {
+        return Instance.StartCoroutine(coroutine);
+    }
+    
     private void RainWorld_OnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
     {
         orig(self);
